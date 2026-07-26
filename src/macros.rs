@@ -30,3 +30,23 @@ macro_rules! times_ten {
         10 * $inp
     };
 }
+
+#[macro_export]
+macro_rules! to_hashmap {
+    () => {
+        std::collections::HashMap::new()
+    };
+    ($($key:expr => $value:expr),*) => {
+        // For some reason a `let` must be enclosed inside
+        // a conditional statement or `{}`.
+        {
+            let mut hashmap = std::collections::HashMap::new();
+            // Everything inside this block will be repeated
+            // as it is followed by a `*` sybmol.
+            $(
+                hashmap.insert($key,$value);
+            )*
+            hashmap
+        }
+    };
+}
