@@ -13,3 +13,9 @@ wants to go down the same path.
 # Resources:
 
 - The Little Book of Rust macros: `https://lukaswirth.dev/tlborm/`
+
+
+# Some important points: 
+
+- There is a special metavariable `$crate` which can be used to  
+refer to the current crate.  
