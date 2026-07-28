@@ -31,6 +31,8 @@ macro_rules! times_ten {
     };
 }
 
+/// This macro converts a given key value pairs entered in
+/// the format `key => value` to a `std::collections::HashMap`.
 #[macro_export]
 macro_rules! to_hashmap {
     () => {
@@ -48,5 +50,23 @@ macro_rules! to_hashmap {
             )*
             hashmap
         }
+    };
+}
+
+#[macro_export]
+macro_rules! parse_remote_archive {
+    ($vis:vis const $name:ident: RemoteArchive;) => {
+        $vis const $name: $crate::RemoteArchive = {
+            let Some(sha256) =
+                $crate::macro_util::decode_hex(env!("EXOCRATE_SHA256"))
+            else {
+                panic!("invalid sha256");
+            };
+
+            $crate::RemoteArchive {
+                sha256,
+                url: env!("EXOCRATE_URL"),
+            }
+        };
     };
 }
