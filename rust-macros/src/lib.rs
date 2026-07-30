@@ -54,18 +54,41 @@ macro_rules! to_hashmap {
 
 #[macro_export]
 macro_rules! parse_remote_archive {
-    ($vis:vis const $name:ident: RemoteArchive;) => {
+    ($vis:vis const $name:ident: RemoteArchive = $cargo_toml_path:literal [
+        $(($os:ident, $arch:ident)),* $(,)?
+    ];) => {
         $vis const $name: $crate::RemoteArchive = {
-            let Some(sha256) =
-                $crate::macro_util::decode_hex(env!("EXOCRATE_SHA256"))
-            else {
-                panic!("invalid sha256");
+            ::toml_const::toml_const!{
+                const MANIFEST: $cargo_toml_path;
+            }
+
+            let config = {
+                use std::env::consts::*;
+                use $crate::macro_util::pack;
+
+                // NOTE: Rust doesn't support checking `&str`s for equality in a
+                // `const` context. We work around that limitation by packing
+                // their bytes into `u128`s, which can be compared.
+                //
+                // FIXME(#3410): How can we detect if os/arch pairs have been added to
+                // `Cargo.toml` without being added to the macro invocation?
+                match (pack(OS), pack(ARCH)) {
+                    $(
+                        (os, arch) if os == pack(stringify!($os)) && arch == pack(stringify!($arch)) => {
+                            MANIFEST.package.metadata.exocrate.$os.$arch
+                        }
+                    )*
+                    _ => panic!("unsupported platform"),
+                }
             };
 
+            let Some(sha256) = $crate::macro_util::decode_hex(config.sha256) else {
+                panic!("invalid sha256")
+            };
             $crate::RemoteArchive {
                 sha256,
-                url: env!("EXOCRATE_URL"),
+                url: config.url,
             }
         };
-    };
+    }
 }
