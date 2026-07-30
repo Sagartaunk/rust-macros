@@ -1,7 +1,6 @@
 /// Example of a random macro that returns
 /// the integer `4` with no specific type.
 ///
-
 /// For a macro to be public, it needs to be
 /// exported via `#[macro_export]`.
 #[macro_export]

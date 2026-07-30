@@ -21,16 +21,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if line.starts_with('[') {
                     break;
                 }
-
-                if let Some(value) = line.strip_prefix("url=") {
-                    url = Some(value.trim_matches('"').to_owned());
-                }
                 if let Some(value) = line.strip_prefix("sha256 = ") {
                     sha256 = Some(value.trim_matches('"').to_owned());
                 }
+                if let Some(value) = line.strip_prefix("url=") {
+                    url = Some(value.trim_matches('"').to_owned());
+                }
             }
-            println!("cargo:rustc-env=EXOCRATE_URL={}", url.unwrap());
-            println!("cargo:rustc-env=EXOCRATE_SHA256={}", sha256.unwrap());
+
+            if url.is_some() && sha256.is_some() {
+                println!("cargo:rustc-env=EXOCRATE_URL={}", url.unwrap());
+                println!("cargo:rustc-env=EXOCRATE_SHA256={}", sha256.unwrap());
+            } else {
+                println!("Both are none, starting the build");
+            }
         }
     }
 
