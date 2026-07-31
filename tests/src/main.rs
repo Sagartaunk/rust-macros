@@ -1,7 +1,7 @@
-use rust_macros::{RemoteArchive, parse_remote_archive};
+use rust_macros::parse_remote_archive;
 
 parse_remote_archive! {
-    const REMOTE: RemoteArchive = "../../rust-macros/Cargo.toml" [
+    const REMOTE: RemoteArchive = "../../rust-macros/tests/Cargo.toml" [
         (linux, x86_64),
         (linux, aarch64),
         (macos, x86_64),
@@ -10,5 +10,8 @@ parse_remote_archive! {
 }
 
 fn main() {
-    println!("{:?}", REMOTE);
+    println!(
+        "This is the output of the remote archive macro: \n{:?}",
+        REMOTE
+    );
 }
