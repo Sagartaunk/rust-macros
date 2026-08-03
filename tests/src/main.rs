@@ -1,4 +1,4 @@
-use rust_macros::parse_remote_archive;
+use rust_macros::{parse_remote_archive, read_cargo};
 
 parse_remote_archive! {
     const REMOTE: RemoteArchive = "../../rust-macros/tests/Cargo.toml" [
@@ -14,4 +14,6 @@ fn main() {
         "This is the output of the remote archive macro: \n{:?}",
         REMOTE
     );
+    let cargo = read_cargo!();
+    println! {"This is what is inside Cargo.toml {}", cargo};
 }

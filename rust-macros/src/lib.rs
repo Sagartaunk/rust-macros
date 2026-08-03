@@ -175,3 +175,10 @@ pub mod macro_util {
         res
     }
 }
+
+#[macro_export]
+macro_rules! read_cargo {
+    () => {
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"))
+    };
+}

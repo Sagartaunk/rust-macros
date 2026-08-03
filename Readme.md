@@ -19,3 +19,6 @@ wants to go down the same path.
 
 - There is a special metavariable `$crate` which can be used to  
 refer to the current crate.  
+- A `const fn` in rust can be called at compile time and can also  
+be used inside a macro though it cannot read/write files or do things  
+that might depend on `IO`. However, it can be used for pattern matching.  
