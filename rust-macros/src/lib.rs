@@ -1,57 +1,5 @@
-/// Example of a random macro that returns
-/// the integer `4` with no specific type.
-///
-/// For a macro to be public, it needs to be
-/// exported via `#[macro_export]`.
-#[macro_export]
-macro_rules! four {
-    () => {
-        1 + 3
-    };
-}
-
-/// This is a simple macro that multiplies
-/// the input it recieves by 10. The input
-/// can realistically be of any type that
-/// supports multiplication.
-///
-///
-/// The `expr` metavariable catches any expression
-/// given to it, and is defined as `name:expr` where
-/// `name` can be any arbitrary name and can be used
-/// after appending the `$` symbol as in the following
-/// example.
-#[macro_export]
-macro_rules! times_ten {
-    ($inp:expr) => {
-        // We use the metavariable `imp` by declaring
-        // it as `$imp`.
-        10 * $inp
-    };
-}
-
-/// This macro converts a given key value pairs entered in
-/// the format `key => value` to a `std::collections::HashMap`.
-#[macro_export]
-macro_rules! to_hashmap {
-    () => {
-        std::collections::HashMap::new()
-    };
-    ($($key:expr => $value:expr),*) => {
-        // For some reason a `let` must be enclosed inside
-        // a conditional statement or `{}`.
-        {
-            let mut hashmap = std::collections::HashMap::new();
-            // Everything inside this block will be repeated
-            // as it is followed by a `*` sybmol.
-            $(
-                hashmap.insert($key,$value);
-            )*
-            hashmap
-        }
-    };
-}
-
+//! Most of the code this crate contains is stolen
+//! from google's zerocopy crate.
 #[derive(Debug)]
 pub struct RemoteArchive {
     pub url: &'static str,
@@ -60,51 +8,34 @@ pub struct RemoteArchive {
 }
 
 #[macro_export]
-macro_rules! parse_remote_archive {
-    ($vis:vis const $name:ident: RemoteArchive = $cargo_toml_path:literal [
-        $(($os:ident, $arch:ident)),* $(,)?
-    ];) => {
-        $vis const $name: $crate::RemoteArchive = {
-            ::toml_const::toml_const!{
-                const MANIFEST: $cargo_toml_path;
-            }
+macro_rules! test_find_line {
+    () => {{
+        const MANIFEST: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
 
-            let config = {
-                use std::env::consts::*;
-                use $crate::macro_util::pack;
+        const PREFIX: &str = "[package.metadata.exocrate.";
 
-                // NOTE: Rust doesn't support checking `&str`s for equality in a
-                // `const` context. We work around that limitation by packing
-                // their bytes into `u128`s, which can be compared.
-                //
-                // FIXME(#3410): How can we detect if os/arch pairs have been added to
-                // `Cargo.toml` without being added to the macro invocation?
-                match (pack(OS), pack(ARCH)) {
-                    $(
-                        (os, arch) if os == pack(stringify!($os)) && arch == pack(stringify!($arch)) => {
-                            MANIFEST.package.metadata.exocrate.$os.$arch
-                        }
-                    )*
-                    _ => panic!("unsupported platform"),
-                }
-            };
+        let offset = $crate::macro_util::find_line(
+            MANIFEST,
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            PREFIX,
+        )
+        .expect("Unsupported Platform");
 
-            let Some(sha256) = $crate::macro_util::decode_hex(config.sha256) else {
-                panic!("invalid sha256")
-            };
-            $crate::RemoteArchive {
-                sha256,
-                url: config.url,
-            }
-        };
-    }
+        MANIFEST[..offset].bytes().filter(|&b| b == b'\n').count() + 1
+    }};
 }
-
 /// I have stolen this code from google's zerocopy crate.
 ///
 #[doc(hidden)]
 pub mod macro_util {
     pub use sha2_const::Sha256;
+
+    #[doc(hidden)]
+    pub struct ParsedRemoteArchive<'a> {
+        pub url: &'a str,
+        pub sha256: &'a str,
+    }
 
     /// Packs the bytes of `s` into a `u128`.
     ///
@@ -174,11 +105,103 @@ pub mod macro_util {
         }
         res
     }
-}
 
-#[macro_export]
-macro_rules! read_cargo {
-    () => {
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"))
-    };
+    /// Returns `true` if the bytes in `data` starting at `offset` exactly match
+    /// `to_search`.
+    ///
+    /// If `offset + to_search.len()` would exceed the bounds of `data`, this
+    /// function returns `false`.
+    pub const fn bytes_eq_at(data: &[u8], offset: usize, to_search: &[u8]) -> bool {
+        if offset + to_search.len() > data.len() {
+            return false;
+        }
+
+        let mut i = 0;
+        while i < to_search.len() {
+            if data[offset + i] != to_search[i] {
+                return false;
+            }
+            i += 1;
+        }
+
+        true
+    }
+
+    /// Searches `manifest` for a metadata section whose header matches
+    /// `prefix`, `os`, and `arch`.
+    /// The expected format is `[metadata.exocrate.manifest.{os}.{arch}]`
+    pub const fn find_line(manifest: &str, os: &str, arch: &str, prefix: &str) -> Option<usize> {
+        let bytes = manifest.as_bytes();
+        let os = os.as_bytes();
+        let arch = arch.as_bytes();
+        let prefix = prefix.as_bytes();
+
+        let mut i = 0;
+
+        while i < bytes.len() {
+            // Only consider the beginning of lines.
+            if i != 0 && bytes[i - 1] != b'\n' {
+                i += 1;
+                continue;
+            }
+
+            if !bytes_eq_at(bytes, i, prefix) {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                continue;
+            }
+
+            let mut pos = i + prefix.len();
+
+            if !bytes_eq_at(bytes, pos, os) {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                continue;
+            }
+            pos += os.len();
+
+            if pos >= bytes.len() || bytes[pos] != b'.' {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                continue;
+            }
+            pos += 1;
+
+            if !bytes_eq_at(bytes, pos, arch) {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                if i < bytes.len() {
+                    i += 1;
+                }
+                continue;
+            }
+            pos += arch.len();
+
+            if pos < bytes.len() && bytes[pos] == b']' {
+                return Some(i);
+            }
+
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+        }
+
+        None
+    }
 }
