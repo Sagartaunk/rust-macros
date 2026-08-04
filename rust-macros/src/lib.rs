@@ -25,6 +25,91 @@ macro_rules! test_find_line {
         MANIFEST[..offset].bytes().filter(|&b| b == b'\n').count() + 1
     }};
 }
+
+#[macro_export]
+macro_rules! parse_remote_archive {
+    ($vis:vis const $name:ident: RemoteArchive;) => {
+        $vis const $name: $crate::RemoteArchive = {
+            const MANIFEST: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+            const PREFIX: &str = "[package.metadata.exocrate.";
+
+            let Some(header) = $crate::macro_util::find_line(
+                MANIFEST,
+                ::std::env::consts::OS,
+                ::std::env::consts::ARCH,
+                PREFIX,
+            ) else {
+                panic!("unsupported platform")
+            };
+
+            // Advance past the header line to the first field line.
+            let bytes = MANIFEST.as_bytes();
+            let mut body_start = header;
+            while body_start < bytes.len() && bytes[body_start] != b'\n' {
+                body_start += 1;
+            }
+            if body_start < bytes.len() {
+                body_start += 1;
+            }
+
+            let Some(url) = $crate::macro_util::find_field(MANIFEST, body_start, "url") else {
+                panic!("missing `url` field")
+            };
+            let Some(sha256_str) =
+                $crate::macro_util::find_field(MANIFEST, body_start, "sha256")
+            else {
+                panic!("missing `sha256` field")
+            };
+            let Some(sha256) = $crate::macro_util::decode_hex(sha256_str) else {
+                panic!("invalid sha256")
+            };
+
+            $crate::RemoteArchive { sha256, url }
+        };
+    };
+}
+
+/// This is the legacy renamed parse macro.
+#[macro_export]
+macro_rules! parse_remote_archive_legacy {
+    ($vis:vis const $name:ident: RemoteArchive = $cargo_toml_path:literal [
+        $(($os:ident, $arch:ident)),* $(,)?
+    ];) => {
+        $vis const $name: $crate::RemoteArchive = {
+            ::toml_const::toml_const!{
+                const MANIFEST: $cargo_toml_path;
+            }
+
+            let config = {
+                use std::env::consts::*;
+                use $crate::macro_util::pack;
+
+                // NOTE: Rust doesn't support checking `&str`s for equality in a
+                // `const` context. We work around that limitation by packing
+                // their bytes into `u128`s, which can be compared.
+                //
+                // FIXME(#3410): How can we detect if os/arch pairs have been added to
+                // `Cargo.toml` without being added to the macro invocation?
+                match (pack(OS), pack(ARCH)) {
+                    $(
+                        (os, arch) if os == pack(stringify!($os)) && arch == pack(stringify!($arch)) => {
+                            MANIFEST.package.metadata.exocrate.$os.$arch
+                        }
+                    )*
+                    _ => panic!("unsupported platform"),
+                }
+            };
+
+            let Some(sha256) = $crate::macro_util::decode_hex(config.sha256) else {
+                panic!("invalid sha256")
+            };
+            $crate::RemoteArchive {
+                sha256,
+                url: config.url,
+            }
+        };
+    }
+}
 /// I have stolen this code from google's zerocopy crate.
 ///
 #[doc(hidden)]
@@ -202,6 +287,52 @@ pub mod macro_util {
             }
         }
 
+        None
+    }
+
+    /// This function finds the `value` for a passed `key` in the passed
+    /// `manifest` after starting at `start` offset. It  returns a `None`
+    /// variant if it hits a `[` or an `EOF` before finding the key.
+    ///
+    /// Note: Expected format for key/value pair is:
+    /// `Key = "Value"` do mind the spaces otherwise it will return `None`.
+    pub const fn find_field<'a>(manifest: &'a str, start: usize, key: &str) -> Option<&'a str> {
+        let bytes = manifest.as_bytes();
+        let key = key.as_bytes();
+        let mut i = start;
+        while i < bytes.len() {
+            if bytes[i] == b'[' {
+                return None;
+            }
+            if bytes_eq_at(bytes, i, key) {
+                let mut pos = i + key.len();
+                // expect exactly " = \"" (space, equals, space, quote)
+                if pos + 4 <= bytes.len()
+                    && bytes[pos] == b' '
+                    && bytes[pos + 1] == b'='
+                    && bytes[pos + 2] == b' '
+                    && bytes[pos + 3] == b'"'
+                {
+                    pos += 4;
+                    let value_start = pos;
+                    let mut value_end = value_start;
+                    while value_end < bytes.len() && bytes[value_end] != b'"' {
+                        value_end += 1;
+                    }
+                    if value_end < bytes.len() {
+                        let (_, rest) = manifest.split_at(value_start);
+                        let (value, _) = rest.split_at(value_end - value_start);
+                        return Some(value);
+                    }
+                }
+            }
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1;
+            }
+        }
         None
     }
 }
