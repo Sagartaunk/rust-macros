@@ -69,6 +69,8 @@ macro_rules! parse_remote_archive {
     };
 }
 
+pub use toml_const;
+
 /// This is the legacy renamed parse macro.
 #[macro_export]
 macro_rules! parse_remote_archive_legacy {
@@ -76,7 +78,7 @@ macro_rules! parse_remote_archive_legacy {
         $(($os:ident, $arch:ident)),* $(,)?
     ];) => {
         $vis const $name: $crate::RemoteArchive = {
-            ::toml_const::toml_const!{
+            $crate::toml_const::toml_const!{
                 const MANIFEST: $cargo_toml_path;
             }
 
@@ -110,10 +112,25 @@ macro_rules! parse_remote_archive_legacy {
         };
     }
 }
+
+#[macro_export]
+macro_rules! macro2 {
+    ($manifest:literal) => {{
+        $crate::toml_const::toml_const! {
+            const MANIFEST: $manifest;
+        }
+
+        let _ = MANIFEST.package.metadata.exocrate.map();
+
+        panic!()
+    }};
+}
+
 /// I have stolen this code from google's zerocopy crate.
 ///
 #[doc(hidden)]
 pub mod macro_util {
+    pub use crate::RemoteArchive;
     pub use sha2_const::Sha256;
 
     #[doc(hidden)]

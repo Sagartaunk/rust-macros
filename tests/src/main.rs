@@ -18,26 +18,22 @@ mod legacy {
         ];
     }
 }
+use rust_macros::{RemoteArchive, macro2};
 
-// Macro B: does "something" with the two &str values — here, sums their byte lengths
-macro_rules! macro_b {
-    ($os:expr, $arch:expr) => {
-        $os.len() + $arch.len()
+const ARCHIVE: RemoteArchive = macro2!("Cargo.toml");
+
+use const_format::formatcp;
+
+macro_rules! macro_one {
+    ($name:ident) => {
+        const $name: &str = {
+            use std::env::consts::{ARCH, OS};
+            formatcp!("This is a string {} {}", OS, ARCH)
+        };
     };
 }
 
-// const fn C: takes OS and ARCH as &'static str, uses macro B, returns result
-const fn c(os: &'static str, arch: &'static str) -> usize {
-    macro_b!(os, arch)
-}
-
-// Macro A: pulls std::env::consts::OS/ARCH and calls C
-macro_rules! macro_a {
-    () => {{
-        const RESULT: usize = c(std::env::consts::OS, std::env::consts::ARCH);
-        RESULT
-    }};
-}
+macro_one!(OOS);
 
 fn main() {
     println!("legacy url: {}", legacy::HOST_ARCHIVE.url);
@@ -48,8 +44,7 @@ fn main() {
 
     println!("outputs match");
 
-    let out = macro_a!();
-    println!("OS = {}", std::env::consts::OS);
-    println!("ARCH = {}", std::env::consts::ARCH);
-    println!("combined length = {}", out);
+    println!("{}", OOS);
+
+    println!("{}", ARCHIVE.url);
 }
